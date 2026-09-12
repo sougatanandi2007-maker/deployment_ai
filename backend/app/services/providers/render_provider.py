@@ -82,6 +82,9 @@ class RenderProvider(DeploymentProvider):
             for k, v in environment_variables.items() if k and v
         ]
 
+        b_cmd = build_command or ("pip install -r backend/requirements.txt" if env_type == "python" else "npm install")
+        s_cmd = start_command or ("uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT" if env_type == "python" else "npm start")
+
         service_payload: Dict[str, Any] = {
             "type": "web_service",
             "name": name,
@@ -92,8 +95,10 @@ class RenderProvider(DeploymentProvider):
             "serviceDetails": {
                 "env": env_type,
                 "plan": "free",
-                "buildCommand": build_command or ("pip install -r requirements.txt" if env_type == "python" else "npm install"),
-                "startCommand": start_command or ("uvicorn main:app --host 0.0.0.0 --port $PORT" if env_type == "python" else "npm start"),
+                "envSpecificDetails": {
+                    "buildCommand": b_cmd,
+                    "startCommand": s_cmd
+                },
                 "envVars": env_vars_payload
             }
         }
@@ -106,18 +111,22 @@ class RenderProvider(DeploymentProvider):
                 err_msg = err.get("message") or resp.text
                 raise RuntimeError(f"Render Service Creation Failed: {err_msg}")
 
-            service_data = resp.json().get("service", {})
+            resp_data = resp.json()
+            service_data = resp_data.get("service", {})
             service_id = service_data.get("id")
             service_slug = service_data.get("slug")
             live_url = f"https://{service_slug}.onrender.com" if service_slug else None
+            deploy_id = resp_data.get("deployId")
 
-            # Trigger initial deployment for this new service
-            deploy_url = f"{self.BASE_URL}/services/{service_id}/deploys"
-            deploy_resp = await client.post(deploy_url, headers=self._get_headers(), json={"clearCache": "do_not_clear"})
-            deploy_id = service_id
-            if deploy_resp.status_code in (200, 201):
-                deploy_info = deploy_resp.json()
-                deploy_id = deploy_info.get("id", service_id)
+            if not deploy_id:
+                # Trigger initial deployment for this new service if not auto-triggered
+                deploy_url = f"{self.BASE_URL}/services/{service_id}/deploys"
+                deploy_resp = await client.post(deploy_url, headers=self._get_headers(), json={"clearCache": "do_not_clear"})
+                if deploy_resp.status_code in (200, 201):
+                    deploy_info = deploy_resp.json()
+                    deploy_id = deploy_info.get("id", service_id)
+                else:
+                    deploy_id = service_id
 
             return {
                 "external_id": f"{service_id}:{deploy_id}",
