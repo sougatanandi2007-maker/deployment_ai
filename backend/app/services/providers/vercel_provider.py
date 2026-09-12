@@ -68,6 +68,16 @@ class VercelProvider(DeploymentProvider):
         repo = repo_info.get("repo", "")
         branch = repo_info.get("default_branch", "main")
 
+        # Detect root directory and framework
+        files = repo_info.get("files", [])
+        root_dir = None
+        if "frontend/package.json" in files or "frontend/package.json" in repo_info.get("file_contents", {}):
+            root_dir = "frontend"
+        elif "client/package.json" in files or "client/package.json" in repo_info.get("file_contents", {}):
+            root_dir = "client"
+
+        framework_slug = "vite" if ("vite" in str(files).lower() or "vite" in (repo_info.get("primary_language") or "").lower()) else None
+
         # Step 1: Ensure project exists or create it
         project_url = f"{self.BASE_URL}/v10/projects/{name}"
         headers = self._get_headers()
@@ -80,8 +90,10 @@ class VercelProvider(DeploymentProvider):
                 create_proj_url = f"{self.BASE_URL}/v10/projects"
                 proj_payload: Dict[str, Any] = {
                     "name": name,
-                    "framework": None,
+                    "framework": framework_slug,
                 }
+                if root_dir:
+                    proj_payload["rootDirectory"] = root_dir
                 if build_command:
                     proj_payload["buildCommand"] = build_command
 
@@ -90,6 +102,19 @@ class VercelProvider(DeploymentProvider):
                     error_data = create_resp.json() if create_resp.text else {}
                     err_msg = error_data.get("error", {}).get("message") or create_resp.text
                     raise RuntimeError(f"Vercel Project Creation Failed: {err_msg}")
+            elif proj_resp.status_code == 200 and (root_dir or framework_slug or build_command):
+                # Ensure existing project has correct settings
+                patch_payload = {}
+                if root_dir:
+                    patch_payload["rootDirectory"] = root_dir
+                if framework_slug:
+                    patch_payload["framework"] = framework_slug
+                if build_command:
+                    patch_payload["buildCommand"] = build_command
+                try:
+                    await client.patch(project_url, headers=headers, json=patch_payload)
+                except Exception:
+                    pass
 
             # Step 2: Add environment variables if provided
             if environment_variables:
@@ -137,10 +162,15 @@ class VercelProvider(DeploymentProvider):
                     "ref": branch
                 }
 
+            proj_settings = {}
             if build_command:
-                deploy_payload["projectSettings"] = {
-                    "buildCommand": build_command
-                }
+                proj_settings["buildCommand"] = build_command
+            if root_dir:
+                proj_settings["rootDirectory"] = root_dir
+            if framework_slug:
+                proj_settings["framework"] = framework_slug
+            if proj_settings:
+                deploy_payload["projectSettings"] = proj_settings
 
             deploy_resp = await client.post(deploy_url, headers=headers, json=deploy_payload)
             if deploy_resp.status_code not in (200, 201):
