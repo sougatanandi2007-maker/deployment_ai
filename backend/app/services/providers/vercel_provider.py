@@ -109,16 +109,34 @@ class VercelProvider(DeploymentProvider):
 
             # Step 3: Trigger deployment via v13 deployments API
             deploy_url = f"{self.BASE_URL}/v13/deployments"
+            repo_id = repo_info.get("repo_id")
+
             deploy_payload: Dict[str, Any] = {
                 "name": name,
                 "project": name,
                 "target": "production",
-                "gitSource": {
+            }
+
+            if repo_id:
+                deploy_payload["gitSource"] = {
+                    "type": "github",
+                    "repo": f"{owner}/{repo}",
+                    "repoId": str(repo_id),
+                    "ref": branch
+                }
+            elif repo_info.get("file_contents"):
+                # Fallback to direct file tree deployment if repoId is unavailable
+                deploy_payload["files"] = [
+                    {"file": p, "data": content}
+                    for p, content in repo_info["file_contents"].items() if content
+                ]
+            else:
+                deploy_payload["gitSource"] = {
                     "type": "github",
                     "repo": f"{owner}/{repo}",
                     "ref": branch
                 }
-            }
+
             if build_command:
                 deploy_payload["projectSettings"] = {
                     "buildCommand": build_command
@@ -128,7 +146,27 @@ class VercelProvider(DeploymentProvider):
             if deploy_resp.status_code not in (200, 201):
                 err_data = deploy_resp.json() if deploy_resp.text else {}
                 err_msg = err_data.get("error", {}).get("message") or deploy_resp.text
-                raise RuntimeError(f"Vercel Deployment Failed: {err_msg}")
+                
+                # If gitSource failed due to GitHub app permissions, retry with direct files
+                if repo_info.get("file_contents") and ("git" in err_msg.lower() or "not connected" in err_msg.lower() or "repoid" in err_msg.lower()):
+                    file_payload = {
+                        "name": name,
+                        "project": name,
+                        "target": "production",
+                        "files": [
+                            {"file": p, "data": content}
+                            for p, content in repo_info["file_contents"].items() if content
+                        ]
+                    }
+                    if build_command:
+                        file_payload["projectSettings"] = {"buildCommand": build_command}
+                    file_resp = await client.post(deploy_url, headers=headers, json=file_payload)
+                    if file_resp.status_code in (200, 201):
+                        deploy_resp = file_resp
+                    else:
+                        raise RuntimeError(f"Vercel Deployment Failed: {err_msg}")
+                else:
+                    raise RuntimeError(f"Vercel Deployment Failed: {err_msg}")
 
             data = deploy_resp.json()
             external_id = data.get("id")

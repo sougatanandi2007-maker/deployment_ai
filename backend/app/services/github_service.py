@@ -154,6 +154,7 @@ class GitHubService:
         return {
             "owner": owner,
             "repo": repo,
+            "repo_id": repo_meta.get("id"),
             "clean_url": parsed["clean_url"],
             "default_branch": default_branch,
             "description": repo_meta.get("description") or "",
