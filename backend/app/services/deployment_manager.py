@@ -251,6 +251,23 @@ class DeploymentManager:
 
             self._add_log(deployment_id, "Deployment complete", "success", f"Deployment live and reachable at: {final_url}")
 
+            # Register deployment status on GitHub
+            try:
+                parsed_gh = GitHubService.parse_repo_url(dep["repo_url"])
+                env_name = f"Production - {platform_target.capitalize()}"
+                gh_ok = await gh_service.create_deployment_status(
+                    owner=parsed_gh["owner"],
+                    repo=parsed_gh["repo"],
+                    ref=dep.get("branch") or "main",
+                    environment=env_name,
+                    target_url=final_url,
+                    description=f"Live deployment on {platform_target.capitalize()}"
+                )
+                if gh_ok:
+                    self._add_log(deployment_id, "Deployment complete", "info", f"Successfully synced deployment to GitHub environment: {env_name}")
+            except Exception:
+                pass
+
         except Exception as exc:
             error_message = str(exc)
             dep["stage"] = "Failed"

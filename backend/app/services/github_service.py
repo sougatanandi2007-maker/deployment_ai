@@ -162,3 +162,45 @@ class GitHubService:
             "files": files,
             "file_contents": file_contents
         }
+
+    async def create_deployment_status(
+        self,
+        owner: str,
+        repo: str,
+        ref: str,
+        environment: str,
+        target_url: str,
+        description: str = "Deployed via DeployAI Agent"
+    ) -> bool:
+        """Registers a deployment and status on the GitHub repository."""
+        if not self.token or not self.token.strip():
+            return False
+        headers = {
+            "Authorization": f"Bearer {self.token.strip()}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                dep_payload = {
+                    "ref": ref or "main",
+                    "environment": environment,
+                    "description": description,
+                    "auto_merge": False,
+                    "required_contexts": []
+                }
+                d_resp = await client.post(f"https://api.github.com/repos/{owner}/{repo}/deployments", headers=headers, json=dep_payload)
+                if d_resp.status_code in (200, 201):
+                    dep_id = d_resp.json().get("id")
+                    st_payload = {
+                        "state": "success",
+                        "environment_url": target_url,
+                        "log_url": target_url,
+                        "description": description,
+                        "auto_inactive": False
+                    }
+                    await client.post(f"https://api.github.com/repos/{owner}/{repo}/deployments/{dep_id}/statuses", headers=headers, json=st_payload)
+                    return True
+            except Exception:
+                pass
+        return False
