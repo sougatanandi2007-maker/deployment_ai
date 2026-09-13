@@ -10,23 +10,23 @@ class AnalyzerService:
         file_contents: Dict[str, str] = repo_info.get("file_contents", {})
         primary_lang = repo_info.get("primary_language", "Unknown")
 
-        # Config files presence check
-        has_pkg_json = "package.json" in files or "package.json" in file_contents
-        has_req_txt = "requirements.txt" in files or "requirements.txt" in file_contents
-        has_pyproject = "pyproject.toml" in files or "pyproject.toml" in file_contents
-        has_dockerfile = "Dockerfile" in files or "Dockerfile" in file_contents
-        has_vercel_json = "vercel.json" in files or "vercel.json" in file_contents
-        has_render_yaml = "render.yaml" in files or "render.yaml" in file_contents
+        # Config files presence check across root and monorepo folders
+        has_pkg_json = any(f in files or f in file_contents for f in ("package.json", "frontend/package.json", "client/package.json"))
+        has_req_txt = any(f in files or f in file_contents for f in ("requirements.txt", "backend/requirements.txt", "api/requirements.txt", "server/requirements.txt"))
+        has_pyproject = any(f in files or f in file_contents for f in ("pyproject.toml", "backend/pyproject.toml", "api/pyproject.toml"))
+        has_dockerfile = any(f in files or f in file_contents for f in ("Dockerfile", "backend/Dockerfile", "docker/Dockerfile"))
+        has_vercel_json = any(f in files or f in file_contents for f in ("vercel.json", "frontend/vercel.json"))
+        has_render_yaml = any(f in files or f in file_contents for f in ("render.yaml", "backend/render.yaml"))
 
         # Detect package managers
         package_manager = None
-        if "pnpm-lock.yaml" in files:
+        if "pnpm-lock.yaml" in files or "frontend/pnpm-lock.yaml" in files:
             package_manager = "pnpm"
-        elif "yarn.lock" in files:
+        elif "yarn.lock" in files or "frontend/yarn.lock" in files:
             package_manager = "yarn"
-        elif "package-lock.json" in files or has_pkg_json:
+        elif "package-lock.json" in files or "frontend/package-lock.json" in files or has_pkg_json:
             package_manager = "npm"
-        elif has_pyproject and ("poetry.lock" in files or "[tool.poetry]" in file_contents.get("pyproject.toml", "")):
+        elif has_pyproject and ("poetry.lock" in files or "[tool.poetry]" in file_contents.get("pyproject.toml", "") or "[tool.poetry]" in file_contents.get("backend/pyproject.toml", "")):
             package_manager = "poetry"
         elif has_req_txt:
             package_manager = "pip"

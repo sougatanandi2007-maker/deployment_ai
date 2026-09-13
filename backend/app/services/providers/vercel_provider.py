@@ -76,7 +76,23 @@ class VercelProvider(DeploymentProvider):
         elif "client/package.json" in files or "client/package.json" in repo_info.get("file_contents", {}):
             root_dir = "client"
 
-        framework_slug = "vite" if ("vite" in str(files).lower() or "vite" in (repo_info.get("primary_language") or "").lower()) else None
+        files_str = str(files).lower()
+        framework_slug = None
+        if "next" in files_str:
+            framework_slug = "nextjs"
+        elif "vite" in files_str:
+            framework_slug = "vite"
+        elif "nuxt" in files_str:
+            framework_slug = "nuxtjs"
+        elif "svelte" in files_str:
+            framework_slug = "sveltekit"
+        elif "create-react-app" in files_str or "react-scripts" in files_str:
+            framework_slug = "create-react-app"
+
+        # Normalize build command when rootDirectory is set
+        effective_build_cmd = build_command
+        if root_dir and build_command and f"--prefix {root_dir}" in build_command:
+            effective_build_cmd = "npm run build"
 
         # Step 1: Ensure project exists or create it
         project_url = f"{self.BASE_URL}/v10/projects/{name}"
@@ -94,8 +110,8 @@ class VercelProvider(DeploymentProvider):
                 }
                 if root_dir:
                     proj_payload["rootDirectory"] = root_dir
-                if build_command:
-                    proj_payload["buildCommand"] = build_command
+                if effective_build_cmd:
+                    proj_payload["buildCommand"] = effective_build_cmd
 
                 create_resp = await client.post(create_proj_url, headers=headers, json=proj_payload)
                 if create_resp.status_code not in (200, 201):
@@ -163,8 +179,8 @@ class VercelProvider(DeploymentProvider):
                 }
 
             proj_settings = {}
-            if build_command:
-                proj_settings["buildCommand"] = build_command
+            if effective_build_cmd:
+                proj_settings["buildCommand"] = effective_build_cmd
             if root_dir:
                 proj_settings["rootDirectory"] = root_dir
             if framework_slug:
@@ -188,8 +204,8 @@ class VercelProvider(DeploymentProvider):
                             for p, content in repo_info["file_contents"].items() if content
                         ]
                     }
-                    if build_command:
-                        file_payload["projectSettings"] = {"buildCommand": build_command}
+                    if effective_build_cmd:
+                        file_payload["projectSettings"] = {"buildCommand": effective_build_cmd}
                     file_resp = await client.post(deploy_url, headers=headers, json=file_payload)
                     if file_resp.status_code in (200, 201):
                         deploy_resp = file_resp

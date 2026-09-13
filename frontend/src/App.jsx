@@ -8,6 +8,11 @@ import ErrorModal from './components/ErrorModal';
 import SettingsModal from './components/SettingsModal';
 import { AlertCircle, X } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/+$/, '') : '';
+if (API_BASE) {
+  axios.defaults.baseURL = API_BASE;
+}
+
 export default function App() {
   const [view, setView] = useState('input'); // 'input' | 'analysis' | 'console'
   const [providerStatus, setProviderStatus] = useState({ github: false, vercel: false, render: false, llm: false });

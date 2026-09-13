@@ -51,7 +51,7 @@ class Settings:
 
     # Blocked dangerous tokens
     BLOCKED_SHELL_PATTERNS: List[str] = [
-        ";", "&&", "||", "|", "`", "$(", "${", ">", ">>", "<",
+        ";", "||", "|", "`", "$(", "${", ">", ">>", "<",
         "rm -rf", "sudo", "chmod", "curl", "wget", "eval", "exec", "shutdown", "reboot"
     ]
 

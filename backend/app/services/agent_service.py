@@ -13,17 +13,27 @@ class AIAgentService:
             return True
         cmd = command.strip()
 
-        # Reject dangerous shell injection symbols
-        for blocked in settings.BLOCKED_SHELL_PATTERNS:
-            if blocked in cmd:
+        # Split chained commands (&&) and validate each command individually
+        sub_commands = [c.strip() for c in cmd.split("&&") if c.strip()]
+        if not sub_commands:
+            return False
+
+        for sub in sub_commands:
+            # Reject dangerous shell injection symbols
+            for blocked in settings.BLOCKED_SHELL_PATTERNS:
+                if blocked in sub:
+                    return False
+
+            tokens = sub.split()
+            if not tokens:
                 return False
 
-        # Verify command starts with an allowlisted tool prefix
-        first_token = cmd.split()[0].lower()
-        # strip any path prefix like /usr/bin/npm -> npm
-        base_cmd = first_token.split("/")[-1].split("\\")[-1]
-        
-        return base_cmd in settings.SAFE_COMMAND_PREFIXES
+            first_token = tokens[0].lower()
+            base_cmd = first_token.split("/")[-1].split("\\")[-1]
+            if base_cmd not in settings.SAFE_COMMAND_PREFIXES:
+                return False
+
+        return True
 
     @classmethod
     async def generate_deployment_plan(
@@ -61,33 +71,50 @@ class AIAgentService:
         build_command = None
         start_command = None
 
-        if analysis.frontend:
-            if "Next.js" in analysis.frontend:
-                build_command = f"{pkg_manager} run build"
-                start_command = f"{pkg_manager} start"
-            elif "React" in analysis.frontend or "Vite" in analysis.frontend:
-                build_command = f"{pkg_manager} run build"
-                start_command = f"{pkg_manager} run preview"
-            elif "Vue" in analysis.frontend or "Nuxt" in analysis.frontend:
-                build_command = f"{pkg_manager} run build"
-                start_command = f"{pkg_manager} start"
-            elif analysis.has_package_json:
-                build_command = f"{pkg_manager} run build"
-                start_command = f"{pkg_manager} start"
+        has_backend_dir = any("backend/" in f for f in analysis.detected_files)
+        has_frontend_dir = any("frontend/" in f or "client/" in f for f in analysis.detected_files)
 
-        if analysis.backend:
-            if "FastAPI" in analysis.backend:
-                build_command = "pip install -r requirements.txt" if analysis.has_requirements_txt else None
-                start_command = "uvicorn main:app --host 0.0.0.0 --port $PORT"
-            elif "Flask" in analysis.backend:
-                build_command = "pip install -r requirements.txt" if analysis.has_requirements_txt else None
-                start_command = "gunicorn app:app"
-            elif "Express" in analysis.backend:
-                build_command = f"{pkg_manager} install"
-                start_command = "node server.js"
-            elif analysis.has_requirements_txt:
-                build_command = "pip install -r requirements.txt"
-                start_command = "python main.py"
+        # If user explicitly preferred Render or if backend-only deployment:
+        if pref == "render" or (not frontend_platform and backend_platform):
+            if analysis.backend:
+                if "FastAPI" in analysis.backend:
+                    if has_backend_dir:
+                        build_command = "pip install -r backend/requirements.txt"
+                        start_command = "uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT"
+                    else:
+                        build_command = "pip install -r requirements.txt" if analysis.has_requirements_txt else None
+                        start_command = "uvicorn main:app --host 0.0.0.0 --port $PORT"
+                elif "Flask" in analysis.backend:
+                    build_command = "pip install -r backend/requirements.txt" if has_backend_dir else ("pip install -r requirements.txt" if analysis.has_requirements_txt else None)
+                    start_command = "gunicorn app:app"
+                elif "Express" in analysis.backend:
+                    build_command = f"{pkg_manager} install"
+                    start_command = "node server.js"
+                elif analysis.has_requirements_txt:
+                    build_command = "pip install -r backend/requirements.txt" if has_backend_dir else "pip install -r requirements.txt"
+                    start_command = "python app.py" if has_backend_dir else "python main.py"
+        else:
+            if analysis.frontend:
+                if "Next.js" in analysis.frontend:
+                    build_command = f"{pkg_manager} run build"
+                    start_command = f"{pkg_manager} start"
+                elif "React" in analysis.frontend or "Vite" in analysis.frontend:
+                    build_command = f"{pkg_manager} run build"
+                    start_command = f"{pkg_manager} run preview"
+                elif "Vue" in analysis.frontend or "Nuxt" in analysis.frontend:
+                    build_command = f"{pkg_manager} run build"
+                    start_command = f"{pkg_manager} start"
+                elif analysis.has_package_json:
+                    build_command = f"{pkg_manager} run build"
+                    start_command = f"{pkg_manager} start"
+            elif analysis.backend:
+                if "FastAPI" in analysis.backend:
+                    if has_backend_dir:
+                        build_command = "pip install -r backend/requirements.txt"
+                        start_command = "uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT"
+                    else:
+                        build_command = "pip install -r requirements.txt" if analysis.has_requirements_txt else None
+                        start_command = "uvicorn main:app --host 0.0.0.0 --port $PORT"
 
         # 3. Formulate step-by-step plan
         plan_steps: List[str] = [
@@ -211,10 +238,13 @@ class AIAgentService:
             f"Briefly explain in 2-3 sentences the deployment strategy and recommendations for this repository."
         )
         
-        # Support OpenAI-compatible endpoint
-        url = "https://api.openai.com/v1/chat/completions"
+        # Support OpenAI or Gemini endpoint
+        is_gemini = api_key.startswith("AIza") or bool(settings.GEMINI_API_KEY and api_key == settings.GEMINI_API_KEY)
+        url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" if is_gemini else "https://api.openai.com/v1/chat/completions"
+        model = "gemini-1.5-flash" if is_gemini else "gpt-4o-mini"
+        
         payload = {
-            "model": "gpt-4o-mini",
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 150
         }
@@ -235,9 +265,12 @@ class AIAgentService:
             f"Respond in valid JSON only with keys:\n"
             f"root_cause (short string), explanation (string), suggested_fix (string), recommended_changes (object)."
         )
-        url = "https://api.openai.com/v1/chat/completions"
+        is_gemini = api_key.startswith("AIza") or bool(settings.GEMINI_API_KEY and api_key == settings.GEMINI_API_KEY)
+        url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" if is_gemini else "https://api.openai.com/v1/chat/completions"
+        model = "gemini-1.5-flash" if is_gemini else "gpt-4o-mini"
+
         payload = {
-            "model": "gpt-4o-mini",
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"},
             "max_tokens": 300

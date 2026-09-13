@@ -31,6 +31,7 @@ def test_safe_command_validation():
     assert AIAgentService.validate_command_safety("pip install -r requirements.txt") is True
     assert AIAgentService.validate_command_safety("uvicorn main:app --host 0.0.0.0 --port $PORT") is True
     assert AIAgentService.validate_command_safety("node server.js") is True
+    assert AIAgentService.validate_command_safety("npm install && npm run build") is True
 
     # Dangerous / injected commands
     assert AIAgentService.validate_command_safety("rm -rf /") is False
@@ -79,6 +80,25 @@ def test_analyzer_heuristics():
     assert py_analysis.backend == "FastAPI"
     assert py_analysis.package_manager == "pip"
     assert "DATABASE_URL" in py_analysis.detected_env_vars
+
+    # Mock Monorepo with frontend and backend subdirectories
+    mock_monorepo = {
+        "repo": "deployment-ai",
+        "owner": "user",
+        "clean_url": "https://github.com/user/deployment-ai",
+        "default_branch": "main",
+        "primary_language": "Python",
+        "files": ["frontend/package.json", "backend/requirements.txt", "README.md"],
+        "file_contents": {
+            "frontend/package.json": '{"dependencies": {"react": "^18.3.0", "vite": "^6.0.0"}}',
+            "backend/requirements.txt": "fastapi>=0.115.0\nuvicorn>=0.32.0\n"
+        }
+    }
+    mono_analysis = AnalyzerService.analyze_repository_data(mock_monorepo)
+    assert mono_analysis.project_type == "full_stack"
+    assert mono_analysis.has_requirements_txt is True
+    assert mono_analysis.has_package_json is True
+    assert "FastAPI" in mono_analysis.backend
 
 @pytest.mark.asyncio
 async def test_agent_deployment_planning():
