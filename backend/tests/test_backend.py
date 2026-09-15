@@ -149,3 +149,57 @@ def test_providers_initialization():
     browser = BrowserDeploymentProvider()
     assert "Browser" in browser.get_provider_name()
     assert browser.is_configured() is False
+
+def test_readiness_audit():
+    mock_repo = {
+        "repo": "next-app",
+        "owner": "testuser",
+        "clean_url": "https://github.com/testuser/next-app",
+        "default_branch": "main",
+        "primary_language": "TypeScript",
+        "files": ["package.json", "package-lock.json", ".env.example", "next.config.js"],
+        "file_contents": {
+            "package.json": '{"name": "next-app", "scripts": {"build": "next build"}, "dependencies": {"next": "^14.0.0"}}',
+            ".env.example": "NEXT_PUBLIC_API_URL=https://api.example.com\n"
+        }
+    }
+    analysis = AnalyzerService.analyze_repository_data(mock_repo)
+    assert analysis.readiness_report is not None
+    assert analysis.readiness_report.score >= 80
+    assert analysis.readiness_report.grade in ("A", "B")
+    assert any(c.name == "Build Script" and c.status == "pass" for c in analysis.readiness_report.checks)
+    assert any(c.name == "Lockfile Integrity" and c.status == "pass" for c in analysis.readiness_report.checks)
+
+def test_iac_generator():
+    mock_analysis = ProjectAnalysis(
+        repo_name="my-cool-app",
+        repo_owner="testuser",
+        repo_url="https://github.com/testuser/my-cool-app",
+        default_branch="main",
+        language="TypeScript",
+        framework="React (Vite)",
+        project_type="frontend",
+        frontend="React (Vite)",
+        backend=None,
+        package_manager="npm",
+        has_package_json=True,
+        has_requirements_txt=False,
+        has_pyproject_toml=False,
+        has_dockerfile=False,
+        has_vercel_json=False,
+        has_render_yaml=False,
+        detected_files=["package.json", "vite.config.ts"],
+        detected_env_vars=["VITE_API_URL"]
+    )
+    iac_files = AnalyzerService.generate_iac_files(
+        analysis=mock_analysis,
+        preferred_target="vercel",
+        build_command="npm run build"
+    )
+    filenames = [f.filename for f in iac_files]
+    assert ".github/workflows/deploy.yml" in filenames
+    assert "Dockerfile" in filenames
+    assert "vercel.json" in filenames
+    ci_file = next(f for f in iac_files if f.filename == ".github/workflows/deploy.yml")
+    assert "amondnet/vercel-action" in ci_file.content
+

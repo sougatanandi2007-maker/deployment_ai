@@ -7,7 +7,8 @@ from ..models.schemas import (
     DeploymentStatusResponse,
     LogEntry,
     ErrorDiagnosis,
-    RetryRequest
+    RetryRequest,
+    DeploymentSummary
 )
 from ..config import settings
 from .github_service import GitHubService
@@ -41,6 +42,25 @@ class DeploymentManager:
 
     def get_deployment(self, deployment_id: str) -> Optional[Dict[str, Any]]:
         return self._deployments.get(deployment_id)
+
+    def get_all_deployments_summary(self) -> List[DeploymentSummary]:
+        """Returns list of recent deployment summaries sorted chronologically (newest first)."""
+        summaries = []
+        for dep in self._deployments.values():
+            summaries.append(DeploymentSummary(
+                deployment_id=dep["deployment_id"],
+                repo_url=dep["repo_url"],
+                platform=dep["platform"],
+                stage=dep["stage"],
+                status=dep["status"],
+                progress=dep["progress"],
+                deployment_url=dep.get("deployment_url"),
+                created_at=dep["created_at"],
+                updated_at=dep["updated_at"],
+                logs_count=len(dep.get("logs", []))
+            ))
+        # Sort newest first
+        return sorted(summaries, key=lambda s: s.created_at, reverse=True)
 
     def get_status_response(self, deployment_id: str) -> Optional[DeploymentStatusResponse]:
         dep = self._deployments.get(deployment_id)

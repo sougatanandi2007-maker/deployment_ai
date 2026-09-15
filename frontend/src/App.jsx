@@ -6,6 +6,7 @@ import AnalysisView from './components/AnalysisView';
 import DeploymentConsole from './components/DeploymentConsole';
 import ErrorModal from './components/ErrorModal';
 import SettingsModal from './components/SettingsModal';
+import HistoryDrawer from './components/HistoryDrawer';
 import { AlertCircle, X } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/+$/, '') : '';
@@ -27,6 +28,9 @@ export default function App() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDiagnosisOpen, setIsDiagnosisOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [deploymentsHistory, setDeploymentsHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [flashError, setFlashError] = useState(null);
 
   // Analysis state
@@ -43,9 +47,10 @@ export default function App() {
 
   const pollIntervalRef = useRef(null);
 
-  // Fetch initial backend provider health
+  // Fetch initial backend provider health & deployment history
   useEffect(() => {
     fetchProviderStatus();
+    fetchDeploymentsHistory();
   }, []);
 
   const fetchProviderStatus = async () => {
@@ -54,6 +59,20 @@ export default function App() {
       setProviderStatus(resp.data);
     } catch (err) {
       console.warn('Backend provider status endpoint unreachable:', err);
+    }
+  };
+
+  const fetchDeploymentsHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const resp = await axios.get('/api/deployments');
+      if (Array.isArray(resp.data)) {
+        setDeploymentsHistory(resp.data);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch deployment history:', err);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -140,11 +159,13 @@ export default function App() {
 
         if (depData.status === 'failed') {
           clearInterval(pollIntervalRef.current);
+          fetchDeploymentsHistory();
           if (depData.diagnosis) {
             setIsDiagnosisOpen(true);
           }
         } else if (depData.status === 'ready') {
           clearInterval(pollIntervalRef.current);
+          fetchDeploymentsHistory();
         }
       } catch (e) {
         console.error('Polling error:', e);
@@ -180,6 +201,13 @@ export default function App() {
     }
   };
 
+  const handleSelectHistoricalDeployment = (depId) => {
+    setIsHistoryOpen(false);
+    setDeploymentId(depId);
+    setView('console');
+    startPolling(depId);
+  };
+
   const handleNewDeploy = () => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     setDeploymentId(null);
@@ -196,6 +224,8 @@ export default function App() {
       <Header
         providerStatus={providerStatus}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenHistory={() => setIsHistoryOpen(true)}
+        deploymentsCount={deploymentsHistory.length}
       />
 
       {/* Flash Error Banner */}
@@ -239,6 +269,16 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Deployment History Drawer */}
+      <HistoryDrawer
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        deployments={deploymentsHistory}
+        onSelectDeployment={handleSelectHistoricalDeployment}
+        onRefresh={fetchDeploymentsHistory}
+        loading={loadingHistory}
+      />
 
       {/* Diagnosis & Approved Fix Modal */}
       <ErrorModal

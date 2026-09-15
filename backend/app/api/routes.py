@@ -7,7 +7,10 @@ from ..models.schemas import (
     DeploymentStatusResponse,
     LogEntry,
     RetryRequest,
-    HealthResponse
+    HealthResponse,
+    GenerateIaCRequest,
+    IaCConfigResponse,
+    DeploymentSummary
 )
 from ..config import settings
 from ..services.github_service import GitHubService
@@ -127,3 +130,32 @@ async def manual_diagnose(deployment_id: str):
     )
     dep["diagnosis"] = diagnosis.model_dump()
     return diagnosis
+
+@router.get("/deployments", response_model=List[DeploymentSummary])
+async def list_deployments():
+    """Returns past deployment runs and their current operational status."""
+    return deployment_manager.get_all_deployments_summary()
+
+@router.post("/generate-iac", response_model=IaCConfigResponse)
+async def generate_iac(req: GenerateIaCRequest):
+    """Generates production-grade GitHub Actions CI/CD workflow, Dockerfile, and cloud manifests."""
+    try:
+        gh_service = GitHubService()
+        repo_data = await gh_service.inspect_repository(req.repo_url)
+        analysis = AnalyzerService.analyze_repository_data(repo_data)
+        
+        files = AnalyzerService.generate_iac_files(
+            analysis=analysis,
+            preferred_target=req.platform,
+            build_command=req.build_command,
+            start_command=req.start_command,
+            env_vars=req.environment_variables
+        )
+        return IaCConfigResponse(
+            success=True,
+            platform=req.platform,
+            files=files
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate IaC files: {str(e)}")
+

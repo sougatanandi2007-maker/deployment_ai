@@ -1,7 +1,7 @@
 import React from 'react';
-import { Rocket, ShieldCheck, Key, RefreshCw, ExternalLink } from 'lucide-react';
+import { Rocket, ShieldCheck, Key, RefreshCw, ExternalLink, History } from 'lucide-react';
 
-export default function Header({ providerStatus, onOpenSettings }) {
+export default function Header({ providerStatus, onOpenSettings, onOpenHistory, deploymentsCount = 0 }) {
   return (
     <header className="border-b border-cyber-border bg-cyber-900/80 backdrop-blur-md sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -16,7 +16,7 @@ export default function Header({ providerStatus, onOpenSettings }) {
                 DeployAI Agent
               </span>
               <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                MVP Prototype
+                v2.0 Pro
               </span>
             </div>
             <p className="text-xs text-slate-400">Autonomous Cloud Deployment Pipeline</p>
@@ -24,7 +24,7 @@ export default function Header({ providerStatus, onOpenSettings }) {
         </div>
 
         {/* Provider Status Indicators & Actions */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3">
           <div className="hidden md:flex items-center space-x-2 text-xs bg-cyber-800/80 px-3 py-1.5 rounded-lg border border-cyber-border">
             <span className="text-slate-400 font-medium">APIs:</span>
             
@@ -46,12 +46,27 @@ export default function Header({ providerStatus, onOpenSettings }) {
             </div>
           </div>
 
+          {/* Deployments History button */}
+          <button
+            onClick={onOpenHistory}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-cyber-800 hover:bg-cyber-700 text-slate-200 border border-cyber-border transition-colors shadow-sm relative"
+            title="View recent deployment runs"
+          >
+            <History className="w-3.5 h-3.5 text-blue-400" />
+            <span>History</span>
+            {deploymentsCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                {deploymentsCount}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={onOpenSettings}
             className="flex items-center space-x-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-cyber-800 hover:bg-cyber-700 text-slate-200 border border-cyber-border transition-colors shadow-sm"
           >
             <Key className="w-3.5 h-3.5 text-slate-400" />
-            <span>Tokens / Settings</span>
+            <span className="hidden sm:inline">Tokens / Settings</span>
           </button>
         </div>
       </div>

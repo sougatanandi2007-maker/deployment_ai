@@ -6,6 +6,47 @@ class AnalyzeRequest(BaseModel):
     project_description: Optional[str] = Field(None, description="Optional user-provided project description")
     target_platform: Optional[str] = Field(None, description="Optional user target preference (e.g. vercel, render)")
 
+class ReadinessCheckItem(BaseModel):
+    name: str
+    status: str  # "pass" | "warn" | "fail" | "info"
+    message: str
+
+class ReadinessReport(BaseModel):
+    score: int  # 0 to 100
+    grade: str  # "A" | "B" | "C" | "F"
+    checks: List[ReadinessCheckItem] = Field(default_factory=list)
+    recommendations: List[str] = Field(default_factory=list)
+
+class IaCFile(BaseModel):
+    filename: str
+    content: str
+    description: str
+    language: str  # "yaml" | "dockerfile" | "json"
+
+class IaCConfigResponse(BaseModel):
+    success: bool
+    platform: str
+    files: List[IaCFile] = Field(default_factory=list)
+
+class GenerateIaCRequest(BaseModel):
+    repo_url: str
+    platform: str = "vercel"
+    build_command: Optional[str] = None
+    start_command: Optional[str] = None
+    environment_variables: Optional[List[str]] = Field(default_factory=list)
+
+class DeploymentSummary(BaseModel):
+    deployment_id: str
+    repo_url: str
+    platform: str
+    stage: str
+    status: str
+    progress: int
+    deployment_url: Optional[str] = None
+    created_at: str
+    updated_at: str
+    logs_count: int = 0
+
 class ProjectAnalysis(BaseModel):
     repo_name: str
     repo_owner: str
@@ -26,6 +67,7 @@ class ProjectAnalysis(BaseModel):
     detected_files: List[str] = Field(default_factory=list)
     detected_env_vars: List[str] = Field(default_factory=list)
     readme_snippet: Optional[str] = None
+    readiness_report: Optional[ReadinessReport] = None
 
 class DeploymentPlan(BaseModel):
     project_type: str

@@ -38,3 +38,21 @@ def test_deploy_validation():
     })
     assert resp_unsafe.status_code == 400
     assert "unsafe" in resp_unsafe.json()["detail"].lower()
+
+def test_deployments_list_endpoint():
+    resp = client.get("/api/deployments")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+def test_generate_iac_endpoint():
+    resp = client.post("/api/generate-iac", json={
+        "repo_url": "https://github.com/facebook/react",
+        "platform": "vercel",
+        "build_command": "npm run build"
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["platform"] == "vercel"
+    assert len(data["files"]) >= 2
+

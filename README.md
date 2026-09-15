@@ -27,9 +27,12 @@ An autonomous developer agent that analyzes public GitHub repositories, generate
 - 🔍 **Automated Repository Inspection**: Reads GitHub repositories via GitHub REST API without requiring private keys. Analyzes root and nested files (`package.json`, `requirements.txt`, `pyproject.toml`, `Dockerfile`, `vercel.json`, `render.yaml`, `.env.example`, lockfiles).
 - 🧠 **Smart Framework & Architecture Detection**: Accurately classifies language, package manager (`npm`, `pnpm`, `yarn`, `pip`, `poetry`), project architecture (`frontend`, `backend`, `full_stack`, `static`), and framework (React, Vite, Next.js, FastAPI, Flask, Express, Django).
 - 🛡️ **Safe Command Allowlist**: Prohibits arbitrary shell injections (`rm -rf`, `sudo`, piping, multiple chained statements); strictly enforces allowlisted tool prefixes.
+- 🩺 **Pre-Flight Readiness & Security Audit**: Scores projects (0-100%, Grades A-D) across manifest integrity, lockfile reproducibility, build scripts, and env configurations with automated recommendations.
 - 📋 **Structured Deployment Plan**: Suggests optimal cloud targets (e.g. Next.js/React &rarr; Vercel, Python/Node API &rarr; Render) with step-by-step rationale.
+- 🛠️ **Automated CI/CD & IaC Generator**: Automatically creates production-ready GitHub Actions CI/CD workflows (`.github/workflows/deploy.yml`), optimized multi-stage Dockerfiles, and platform manifests (`vercel.json` / `render.yaml`) with 1-click preview, copy, and download.
 - ⚡ **Official Cloud APIs**: Directly interacts with **Vercel REST API v13** and **Render REST API v1**—never fakes deployment outcomes.
-- 📊 **Real-time Pipeline & Logs**: Progress stepper (`Analyzing` &rarr; `Planning` &rarr; `Preparing` &rarr; `Deploying Frontend/Backend` &rarr; `Checking` &rarr; `Live`), color-coded terminal logs, and live URLs.
+- 📊 **Real-time Pipeline & Logs**: Progress stepper, color-coded terminal logs, real-time log search, level filtering (`All`, `Info`, `Success`, `Warn`, `Error`), `.txt` logs export, and live GitHub status badge generation.
+- 📜 **Deployment History & Activity Manager**: Full activity timeline allowing developers to track past deployments, inspect logs, and navigate back to live deployments.
 - 🩹 **Self-Healing Error Diagnosis**: On build or provisioning failure, the AI Diagnosis Agent isolates root cause, formulates remedial parameters (adjusted build command or missing environment variables), and requires user approval before retrying (prevents runaway loops).
 
 ---
@@ -191,12 +194,14 @@ Open `http://127.0.0.1:5173` in your browser.
 |---|---|---|
 | `GET` | `/api/health` | Service health and configured provider indicators |
 | `GET` | `/api/config/providers` | Provider configuration status (without exposing secrets) |
-| `POST` | `/api/analyze` | Ingests GitHub URL; returns project manifest and AI plan |
+| `POST` | `/api/analyze` | Ingests GitHub URL; returns project manifest, AI plan, and pre-flight readiness audit |
 | `POST` | `/api/deploy` | Queues and starts a cloud deployment job |
 | `GET` | `/api/deploy/{id}` | Polls deployment stage, progress (0-100), and live URLs |
 | `GET` | `/api/deploy/{id}/logs` | Returns real-time log entries with timestamps |
 | `POST` | `/api/deploy/{id}/retry` | Applies user-approved changes and retries deployment |
 | `POST` | `/api/deploy/{id}/diagnose` | Triggers error analysis on a failed deployment |
+| `GET` | `/api/deployments` | Lists recent deployment runs and current statuses |
+| `POST` | `/api/generate-iac` | Generates GitHub Actions workflow, Dockerfile, and cloud manifests |
 
 ---
 

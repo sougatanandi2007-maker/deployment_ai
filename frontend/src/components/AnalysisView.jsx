@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { 
   CheckCircle2, 
   Terminal, 
@@ -13,7 +14,13 @@ import {
   Package, 
   AlertCircle,
   Plus,
-  Trash2
+  Trash2,
+  Copy,
+  Check,
+  Download,
+  Code2,
+  Award,
+  Sparkles
 } from 'lucide-react';
 
 export default function AnalysisView({ 
@@ -64,6 +71,51 @@ export default function AnalysisView({
       delete copy[key];
       return copy;
     });
+  };
+
+  const [iacFiles, setIacFiles] = useState([]);
+  const [activeIacIdx, setActiveIacIdx] = useState(0);
+  const [copiedIac, setCopiedIac] = useState(false);
+  const [loadingIac, setLoadingIac] = useState(false);
+
+  useEffect(() => {
+    fetchIaCFiles();
+  }, [targetPlatform, buildCommand, startCommand]);
+
+  const fetchIaCFiles = async () => {
+    setLoadingIac(true);
+    try {
+      const resp = await axios.post('/api/generate-iac', {
+        repo_url: analysis.repo_url,
+        platform: targetPlatform,
+        build_command: buildCommand.trim() || undefined,
+        start_command: startCommand.trim() || undefined,
+        environment_variables: Object.keys(envVars)
+      });
+      if (resp.data.success && resp.data.files) {
+        setIacFiles(resp.data.files);
+      }
+    } catch (e) {
+      console.warn('Could not generate IaC files:', e);
+    } finally {
+      setLoadingIac(false);
+    }
+  };
+
+  const handleCopyIac = (content) => {
+    navigator.clipboard.writeText(content);
+    setCopiedIac(true);
+    setTimeout(() => setCopiedIac(false), 2000);
+  };
+
+  const handleDownloadIac = (file) => {
+    const blob = new Blob([file.content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.filename.replace(/^.*\//, '');
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleConfirmDeploy = () => {
@@ -173,6 +225,60 @@ export default function AnalysisView({
               </div>
             </div>
           </div>
+
+          {/* Pre-flight Readiness Scorecard */}
+          {analysis.readiness_report && (
+            <div className="glass-card rounded-2xl p-6 shadow-xl border border-cyber-border">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-2">
+                  <Award className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-sm font-bold text-white tracking-tight">Pre-flight Readiness</h3>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs font-mono font-bold text-slate-300">
+                    {analysis.readiness_report.score}/100
+                  </span>
+                  <span className={`px-2 py-0.5 text-xs font-extrabold rounded-md ${
+                    analysis.readiness_report.grade === 'A'
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : analysis.readiness_report.grade === 'B'
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  }`}>
+                    Grade {analysis.readiness_report.grade}
+                  </span>
+                </div>
+              </div>
+
+              {/* Checks list */}
+              <div className="space-y-2 mb-4">
+                {analysis.readiness_report.checks.map((c, idx) => (
+                  <div key={idx} className="p-2.5 bg-cyber-800/60 rounded-xl border border-cyber-border/60 flex items-start space-x-2.5 text-xs">
+                    {c.status === 'pass' && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />}
+                    {c.status === 'warn' && <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />}
+                    {c.status === 'fail' && <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />}
+                    {c.status === 'info' && <ShieldCheck className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />}
+                    <div>
+                      <span className="font-semibold text-slate-200 block">{c.name}</span>
+                      <span className="text-[11px] text-slate-400 leading-tight">{c.message}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Recommendations */}
+              {analysis.readiness_report.recommendations?.length > 0 && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs space-y-1 text-amber-300">
+                  <span className="font-semibold block text-[11px] uppercase tracking-wider text-amber-400">Recommendations:</span>
+                  <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-300">
+                    {analysis.readiness_report.recommendations.map((rec, i) => (
+                      <li key={i}>{rec}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Column: AI Deployment Plan & Configuration */}
@@ -382,6 +488,81 @@ export default function AnalysisView({
           </div>
         </div>
       </div>
+
+      {/* Infrastructure as Code & CI/CD Generator Section */}
+      {iacFiles.length > 0 && (
+        <div className="glass-card rounded-2xl p-6 shadow-xl border border-cyber-border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-cyber-border">
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                <Code2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white tracking-tight flex items-center space-x-2">
+                  <span>CI/CD & Infrastructure-As-Code Generator</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono">
+                    Auto-Generated
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Ready-to-use GitHub Actions workflow, multi-stage Dockerfile, and cloud manifests
+                </p>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => handleCopyIac(iacFiles[activeIacIdx]?.content)}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-cyber-800 hover:bg-cyber-700 text-slate-200 border border-cyber-border text-xs font-medium transition-colors"
+              >
+                {copiedIac ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedIac ? 'Copied' : 'Copy'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDownloadIac(iacFiles[activeIacIdx])}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download File</span>
+              </button>
+            </div>
+          </div>
+
+          {/* File tabs */}
+          <div className="flex items-center space-x-2 mb-3 overflow-x-auto pb-1">
+            {iacFiles.map((file, idx) => (
+              <button
+                key={file.filename}
+                type="button"
+                onClick={() => setActiveIacIdx(idx)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center space-x-1.5 ${
+                  activeIacIdx === idx
+                    ? 'bg-cyber-700 text-white font-semibold border border-blue-500/40 shadow-sm'
+                    : 'bg-cyber-900/80 text-slate-400 hover:text-slate-200 border border-cyber-border'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>{file.filename}</span>
+              </button>
+            ))}
+          </div>
+
+          <p className="text-[11px] text-slate-400 mb-2 italic">
+            {iacFiles[activeIacIdx]?.description}
+          </p>
+
+          {/* Code Viewer */}
+          <div className="bg-cyber-950 rounded-xl p-4 border border-cyber-border font-mono text-xs overflow-x-auto max-h-72 select-text">
+            <pre className="text-cyan-300 leading-relaxed font-mono">
+              <code>{iacFiles[activeIacIdx]?.content}</code>
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
